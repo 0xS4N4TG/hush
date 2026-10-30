@@ -56,15 +56,25 @@ fi
 case "$tool" in
   Write|Edit|MultiEdit|NotebookEdit|Read|Glob|Grep|Agent|AskUserQuestion|SendMessage|TaskStop|ToolSearch|Skill) ;;
   *)
-    args=$(printf '%s' "$tool_input" | jq -r 'tostring') || refuse "bad tool input"
-    if printf '%s' "$args" | grep -qiE \
-      -e 'curl[^|;&]* (-A|--user-agent)[ =]' \
-      -e 'wget[^|;&]* (-U|--user-agent)[ =]' \
-      -e "(-H|--header)[ =]+['\"]?(User-Agent|From):" \
-      -e '(^|\\n)(User-Agent|From): *[^ \\n]' \
-      -e "[\\\\\"']*(User-Agent|From)[\\\\\"']* *: *[\\\\\"']+[^\"']+[\\\\\"']+"; then
-      refuse "Blocked: this tool call sets a request identifier (User-Agent or From). Send no identifier at all: ~/.curlrc and ~/.wgetrc already strip the User-Agent header."
-    fi ;;
+    # Checked on the original and the rewritten input. A here-string, not a
+    # pipe: with pipefail a `grep -q` that closes early would turn a match
+    # into a non-zero status and let the call through.
+    for candidate in "$input" "$tool_input"; do
+      args=$(printf '%s' "$candidate" | jq -r 'tostring') || refuse "bad tool input"
+      grep -qiE \
+        -e 'curl[^|;&]* -[a-zA-Z]*A[ =]?' \
+        -e 'curl[^|;&]* --user-agent[ =]' \
+        -e 'wget[^|;&]* -[a-zA-Z]*U[ =]?' \
+        -e 'wget[^|;&]* --user-agent[ =]' \
+        -e "(-H|--header)[ =]*['\"]?(User-Agent|From) *:" \
+        -e '(^|\\n)(User-Agent|From): *[^ \\n]' \
+        -e "[\\\\\"']*(User-Agent|From)[\\\\\"']* *: *[\\\\\"']+[^\"']+[\\\\\"']+" <<<"$args"
+      case $? in
+        0) refuse "Blocked: this tool call sets a request identifier (User-Agent or From). Send no identifier at all: ~/.curlrc and ~/.wgetrc already strip the User-Agent header." ;;
+        1) ;;
+        *) refuse "header check failed" ;;
+      esac
+    done ;;
 esac
 
 if [ $changed -eq 1 ]; then

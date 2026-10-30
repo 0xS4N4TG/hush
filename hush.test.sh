@@ -25,6 +25,11 @@ expect_block Bash '{"command":"curl https://x.test --user-agent=foo"}'
 expect_block Bash '{"command":"wget -U bot https://x.test"}'
 expect_block Bash '{"command":"curl -H '"'"'From: a@b.test'"'"' https://x.test"}'
 expect_block Bash '{"command":"node -e \"fetch(u,{headers:{\\\"User-Agent\\\": \\\"bot\\\"}})\""}'
+expect_block Bash '{"command":"curl -sA Mozilla https://x.test"}'
+expect_block Bash '{"command":"curl -HFrom:a@b.test https://x.test"}'
+expect_block Bash '{"command":"wget -qU bot https://x.test"}'
+expect_pass Bash '{"command":"curl -sS https://x.test -o a.json"}'
+expect_pass Bash '{"command":"ls -lA /tmp"}'
 expect_block WebFetch '{"url":"https://x.test","prompt":"headers: User-Agent: \"x\""}'
 
 # must pass: the words in prose, code and files
