@@ -60,15 +60,17 @@ case "$tool" in
     # pipe: with pipefail a `grep -q` that closes early would turn a match
     # into a non-zero status and let the call through.
     for candidate in "$input" "$tool_input"; do
-      args=$(printf '%s' "$candidate" | jq -r 'tostring') || refuse "bad tool input"
+      # The decoded strings, one per line, so the patterns see the command as
+      # the shell does (real quotes and newlines), not its JSON encoding.
+      args=$(printf '%s' "$candidate" | jq -r '.. | strings') || refuse "bad tool input"
       grep -qiE \
-        -e 'curl[^|;&]* -[a-zA-Z]*A[ =]?' \
-        -e 'curl[^|;&]* --user-agent[ =]' \
-        -e 'wget[^|;&]* -[a-zA-Z]*U[ =]?' \
-        -e 'wget[^|;&]* --user-agent[ =]' \
-        -e "(-H|--header)[ =]*['\"]?(User-Agent|From) *:" \
-        -e '(^|\\n)(User-Agent|From): *[^ \\n]' \
-        -e "[\\\\\"']*(User-Agent|From)[\\\\\"']* *: *[\\\\\"']+[^\"']+[\\\\\"']+" <<<"$args"
+        -e "curl[^|;&]*[[:space:]\"']-[a-zA-Z]*A([[:space:]=\"']|$)" \
+        -e "curl[^|;&]*[[:space:]\"']--user-agent([[:space:]=\"']|$)" \
+        -e "wget[^|;&]*[[:space:]\"']-[a-zA-Z]*U([[:space:]=\"']|$)" \
+        -e "wget[^|;&]*[[:space:]\"']--user-agent([[:space:]=\"']|$)" \
+        -e "(-H|--header)[[:space:]=]*[\"']?(User-Agent|From)[[:space:]]*:" \
+        -e "(^[[:space:]]*|\\\\n)(User-Agent|From):[[:space:]]*[^[:space:]]" \
+        -e "[\\\\\"']*(User-Agent|From)[\\\\\"']*[[:space:]]*:[[:space:]]*[\\\\\"']+[^\"']+[\\\\\"']+" <<<"$args"
       case $? in
         0) refuse "Blocked: this tool call sets a request identifier (User-Agent or From). Send no identifier at all: ~/.curlrc and ~/.wgetrc already strip the User-Agent header." ;;
         1) ;;
