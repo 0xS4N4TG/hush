@@ -72,10 +72,11 @@ case "$tool" in
       # hides in an encoding.
       args=$(printf '%s' "$candidate" | jq -r '
         (.. | strings | gsub("\\\\\n"; "")), (.. | objects | keys[]), tostring') || refuse "bad tool input"
-      # Flag letters are case-sensitive (-A is the agent, -a is not; --data is not -A).
+      # Flag letters are case-sensitive (-A is the agent, -a is not; --data is
+      # not -A); the program name is not (a case-insensitive filesystem runs CURL).
       if hit -E \
-          "curl[^|;&]*[[:space:]\"']-[a-zA-Z]*A" \
-          "wget[^|;&]*[[:space:]\"']-[a-zA-Z]*U" \
+          "[Cc][Uu][Rr][Ll][^|;&]*[[:space:]\"']-[a-zA-Z]*A" \
+          "[Ww][Gg][Ee][Tt][^|;&]*[[:space:]\"']-[a-zA-Z]*U" \
         || hit -iE \
           "curl[^|;&]*[[:space:]\"']--user-agent([[:space:]=\"']|$)" \
           "wget[^|;&]*[[:space:]\"']--user-agent([[:space:]=\"']|$)" \
