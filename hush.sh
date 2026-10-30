@@ -66,20 +66,25 @@ case "$tool" in
       case $? in 0) return 0 ;; 1) return 1 ;; *) refuse "header check failed" ;; esac
     }
     for candidate in "$input" "$tool_input"; do
-      # Two views of the input: the decoded strings and object keys, one per
+      # Three views of the input: the decoded strings and object keys, one per
       # line, with backslash-newline continuations joined, so the patterns see
-      # the command as the shell does; and the JSON text itself, so nothing
-      # hides in an encoding.
+      # the command as the shell does; the same with every quote and backslash
+      # taken out, so cu""rl or c\url is still curl; and the JSON text itself,
+      # so nothing hides in an encoding. This is a regex over a command, not a
+      # shell parser: it catches a model's ordinary mistakes, not an adversary.
       args=$(printf '%s' "$candidate" | jq -r '
-        (.. | strings | gsub("\\\\\n"; "")), (.. | objects | keys[]), tostring') || refuse "bad tool input"
+        (.. | strings | gsub("\\\\\n"; "") | ., gsub("[\"'"'"'\\\\]"; "")), (.. | objects | keys[]), tostring') || refuse "bad tool input"
       # Flag letters are case-sensitive (-A is the agent, -a is not; --data is
       # not -A); the program name is not (a case-insensitive filesystem runs CURL).
+      # Also refused: ways round the rc files that strip the identifier
+      # (curl -q/--disable/-K/--config, wget --config/-e useragent=).
       if hit -E \
-          "[Cc][Uu][Rr][Ll][^|;&]*[[:space:]\"']-[a-zA-Z]*A" \
+          "[Cc][Uu][Rr][Ll][^|;&]*[[:space:]\"']-[a-zA-Z]*[AqK]" \
           "[Ww][Gg][Ee][Tt][^|;&]*[[:space:]\"']-[a-zA-Z]*U" \
         || hit -iE \
-          "curl[^|;&]*[[:space:]\"']--user-agent([[:space:]=\"']|$)" \
-          "wget[^|;&]*[[:space:]\"']--user-agent([[:space:]=\"']|$)" \
+          "curl[^|;&]*[[:space:]\"']--(user-agent|disable|config)([[:space:]=\"']|$)" \
+          "wget[^|;&]*[[:space:]\"']--(user-a[a-z-]*|config)([[:space:]=\"']|$)" \
+          "wget[^|;&]*[[:space:]\"']-e[[:space:]=\"']*user_?agent[[:space:]]*=" \
           "(-H|--header)[[:space:]=\\\\\"']*(User-Agent|From)[[:space:]]*:" \
           "(^[[:space:]]*|\\\\n)(User-Agent|From):[[:space:]]*[^[:space:]]" \
           "[\\\\\"']*(User-Agent|From)[\\\\\"']*[[:space:]]*:[[:space:]]*[\\\\\"']+[^\"']+[\\\\\"']+"; then

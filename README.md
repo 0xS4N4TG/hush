@@ -62,6 +62,8 @@ echo 'user_agent = ' >> ~/.wgetrc
 
 - It does not change git's author: commits use `git config user.email`. Set that yourself if you want a stand-in there.
 - It cannot change what the model has already read. It rewrites what goes out, not what came in.
+- The header rule is a regex over a command, not a shell parser. It catches the model's ordinary mistakes (`curl -A`,
+  a `From:` header, a headers object), not a determined bypass through `eval`, a variable or a script file.
 - It matches fixed terms, not patterns. It will not catch an address that is not on the list.
 
 ## Test
