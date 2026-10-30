@@ -59,23 +59,31 @@ case "$tool" in
     # Checked on the original and the rewritten input. A here-string, not a
     # pipe: with pipefail a `grep -q` that closes early would turn a match
     # into a non-zero status and let the call through.
+    hit() { # hit <grep flags> <patterns...> : 0 matched, 1 not, else refuse
+      local flags=$1; shift; local pats=()
+      for p in "$@"; do pats+=(-e "$p"); done
+      grep -q "$flags" "${pats[@]}" <<<"$args"
+      case $? in 0) return 0 ;; 1) return 1 ;; *) refuse "header check failed" ;; esac
+    }
     for candidate in "$input" "$tool_input"; do
-      # The decoded strings, one per line, so the patterns see the command as
-      # the shell does (real quotes and newlines), not its JSON encoding.
-      args=$(printf '%s' "$candidate" | jq -r '.. | strings') || refuse "bad tool input"
-      grep -qiE \
-        -e "curl[^|;&]*[[:space:]\"']-[a-zA-Z]*A([[:space:]=\"']|$)" \
-        -e "curl[^|;&]*[[:space:]\"']--user-agent([[:space:]=\"']|$)" \
-        -e "wget[^|;&]*[[:space:]\"']-[a-zA-Z]*U([[:space:]=\"']|$)" \
-        -e "wget[^|;&]*[[:space:]\"']--user-agent([[:space:]=\"']|$)" \
-        -e "(-H|--header)[[:space:]=]*[\"']?(User-Agent|From)[[:space:]]*:" \
-        -e "(^[[:space:]]*|\\\\n)(User-Agent|From):[[:space:]]*[^[:space:]]" \
-        -e "[\\\\\"']*(User-Agent|From)[\\\\\"']*[[:space:]]*:[[:space:]]*[\\\\\"']+[^\"']+[\\\\\"']+" <<<"$args"
-      case $? in
-        0) refuse "Blocked: this tool call sets a request identifier (User-Agent or From). Send no identifier at all: ~/.curlrc and ~/.wgetrc already strip the User-Agent header." ;;
-        1) ;;
-        *) refuse "header check failed" ;;
-      esac
+      # Two views of the input: the decoded strings and object keys, one per
+      # line, with backslash-newline continuations joined, so the patterns see
+      # the command as the shell does; and the JSON text itself, so nothing
+      # hides in an encoding.
+      args=$(printf '%s' "$candidate" | jq -r '
+        (.. | strings | gsub("\\\\\n"; "")), (.. | objects | keys[]), tostring') || refuse "bad tool input"
+      # Flag letters are case-sensitive (-A is the agent, -a is not; --data is not -A).
+      if hit -E \
+          "curl[^|;&]*[[:space:]\"']-[a-zA-Z]*A" \
+          "wget[^|;&]*[[:space:]\"']-[a-zA-Z]*U" \
+        || hit -iE \
+          "curl[^|;&]*[[:space:]\"']--user-agent([[:space:]=\"']|$)" \
+          "wget[^|;&]*[[:space:]\"']--user-agent([[:space:]=\"']|$)" \
+          "(-H|--header)[[:space:]=\\\\\"']*(User-Agent|From)[[:space:]]*:" \
+          "(^[[:space:]]*|\\\\n)(User-Agent|From):[[:space:]]*[^[:space:]]" \
+          "[\\\\\"']*(User-Agent|From)[\\\\\"']*[[:space:]]*:[[:space:]]*[\\\\\"']+[^\"']+[\\\\\"']+"; then
+        refuse "Blocked: this tool call sets a request identifier (User-Agent or From). Send no identifier at all: ~/.curlrc and ~/.wgetrc already strip the User-Agent header."
+      fi
     done ;;
 esac
 
