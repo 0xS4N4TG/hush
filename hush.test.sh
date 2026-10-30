@@ -42,6 +42,14 @@ expect_rewrite Bash '{"command":"echo ACME-4711"}' 'echo ORG' '4711'
 expect_rewrite Agent '{"prompt":"Mail jane.doe@mail.test the plan","description":"x"}' 'example@example.com' 'jane.doe'
 
 # the terms file itself stays editable
-expect_pass Edit '{"file_path":"/Users/me/.claude/hooks/pii-terms.txt","old_string":"jane.doe@mail.test","new_string":"x"}'
+expect_pass Edit "{\"file_path\":\"$tmp/.claude/hooks/pii-terms.txt\",\"old_string\":\"jane.doe@mail.test\",\"new_string\":\"x\"}"
+# ...but naming that path does not exempt anything else
+expect_rewrite Bash "{\"command\":\"echo jane.doe@mail.test >> $tmp/.claude/hooks/pii-terms.txt\"}" 'example@example.com' 'jane.doe'
+# a header is still refused after the rewrite
+expect_block Bash '{"command":"curl -H '"'"'From: jane.doe@mail.test'"'"' https://x.test"}'
+# a term with regex characters is matched literally
+printf 'a.b+c@mail.test\n' >> "$tmp/.claude/hooks/pii-terms.txt"
+expect_rewrite Bash '{"command":"echo a.b+c@mail.test"}' 'example@example.com' 'a.b+c'
+expect_pass Bash '{"command":"echo axb+c@mail.test"}'
 
 [ $fail -eq 0 ] && echo "hush: all tests pass" || exit 1
